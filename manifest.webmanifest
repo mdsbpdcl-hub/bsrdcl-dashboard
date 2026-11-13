@@ -1,0 +1,16 @@
+{
+  "name": "BSRDCL Projects Dashboard",
+  "short_name": "BSRDCL",
+  "description": "BSRDCL project progress, updates, follow-up, map and photos.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f6fa",
+  "theme_color": "#f0752f",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

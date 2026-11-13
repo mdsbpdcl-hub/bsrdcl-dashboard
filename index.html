@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BSRDCL Projects Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f0752f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="BSRDCL">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+  :root{--ink:#1d2433;--mut:#667085;--bg:#f5f6fa;--t1:#f0752f;--t2:#f7a531}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);font-family:"Segoe UI",system-ui,sans-serif;color:var(--ink)}
+  #app{position:fixed;inset:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  iframe{width:100%;height:100%;border:0;display:block;background:var(--bg)}
+  #state{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--bg);z-index:5}
+  #state[hidden]{display:none}
+  .card{background:#fff;border-radius:18px;box-shadow:0 1px 2px rgba(29,36,51,.04),0 10px 28px -14px rgba(29,36,51,.22);padding:28px 26px;max-width:380px;width:100%;text-align:center}
+  .card img{width:64px;height:64px;border-radius:16px}
+  .card h1{font-size:18px;margin:14px 0 6px}
+  .card p{margin:0 0 16px;color:var(--mut);font-size:14px;line-height:1.5}
+  .spin{width:28px;height:28px;border:3px solid #eef0f5;border-top-color:var(--t1);border-radius:50%;margin:14px auto 0;animation:s .9s linear infinite}
+  @keyframes s{to{transform:rotate(360deg)}}
+  .btn{display:inline-block;border:0;border-radius:12px;padding:10px 18px;font:600 14px inherit;font-family:inherit;color:#fff;background:linear-gradient(110deg,var(--t1),var(--t2));cursor:pointer;text-decoration:none;margin:4px}
+  .btn.alt{color:var(--ink);background:#eef0f5}
+  @media (prefers-reduced-motion:reduce){.spin{animation:none}}
+</style>
+</head>
+<body>
+<div id="app"><iframe id="f" title="BSRDCL Projects Dashboard" allow="fullscreen; clipboard-write" referrerpolicy="no-referrer"></iframe></div>
+<div id="state">
+  <div class="card" id="loading"><img src="icons/icon-192.png" alt=""><h1>BSRDCL Projects Dashboard</h1><p>Opening the dashboard</p><div class="spin"></div></div>
+  <div class="card" id="fail" hidden><img src="icons/icon-192.png" alt=""><h1>Could not open the dashboard</h1><p id="failMsg">Please check your internet connection and try again.</p><button class="btn" id="retry" type="button">Try again</button><a class="btn alt" id="direct" target="_blank" rel="noopener">Open in browser</a></div>
+</div>
+<script>
+/* ONLY setting to change: the web app link of the deployed dashboard (ends with /exec). */
+var DASHBOARD_URL = 'https://script.google.com/macros/s/AKfycbyDOloyICf1zpLMf-DcP6Yic4FJcdwRzOcBybaLGCzQbPZZaJIKz7D4wLRVuvCjyeUs/exec';
+
+var f=document.getElementById('f'), st=document.getElementById('state'), ld=document.getElementById('loading'), fl=document.getElementById('fail'), timer;
+document.getElementById('direct').href=DASHBOARD_URL;
+function fail(m){ clearTimeout(timer); ld.hidden=true; fl.hidden=false; st.hidden=false; if(m) document.getElementById('failMsg').textContent=m; }
+function open_(){
+  fl.hidden=true; ld.hidden=false; st.hidden=false;
+  if(!navigator.onLine){ fail('You are offline. Connect to the internet and try again.'); return; }
+  clearTimeout(timer); timer=setTimeout(function(){ fail('The dashboard is taking too long to open. Please try again.'); },25000);
+  f.src=DASHBOARD_URL + (DASHBOARD_URL.indexOf('?')<0?'?':'&') + 'app=1';
+}
+f.addEventListener('load',function(){ clearTimeout(timer); st.hidden=true; });
+document.getElementById('retry').addEventListener('click',open_);
+window.addEventListener('online',function(){ if(!fl.hidden) open_(); });
+open_();
+if('serviceWorker' in navigator){ window.addEventListener('load',function(){ try{ navigator.serviceWorker.register('sw.js'); }catch(e){} }); }
+</script>
+</body>
+</html>
