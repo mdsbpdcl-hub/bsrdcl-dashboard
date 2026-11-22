@@ -327,6 +327,21 @@ details.sub>*:last-child{margin-bottom:12px}
 @keyframes ovspin{to{transform:rotate(360deg)}}
 .ov-note{background:#fff7ed;border:1px solid #fdba74;border-left:5px solid #f97316;border-radius:10px;padding:10px 14px;font-size:13.5px;color:#7c2d12}
 /* presentation */
+#layBox{position:fixed;inset:0;z-index:100000;background:#0b1220;display:none;flex-direction:column;color:#fff}
+#layBox.on{display:flex}
+#layBox .lb-bar{flex:none;display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 12px;background:#101a2e;font-size:14px}
+#layBox .lb-bar b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#layBox .lb-bar button{height:34px;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:#fff;padding:0 13px;font:600 13px/1 var(--font);cursor:pointer;margin-left:6px}
+#layBox .lb-st{flex:1;min-height:0;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:8px;-webkit-overflow-scrolling:touch}
+#layBox .lb-st img{max-width:100%;max-height:calc(100vh - 70px);object-fit:contain;background:#fff;border-radius:6px;cursor:zoom-in}
+#layBox.z .lb-st img{max-width:none;max-height:none;width:230%;cursor:zoom-out}
+#layBox .lb-msg{margin:auto;color:#cbd5e1;font-size:15px;text-align:center;padding:20px}
+.mp-layb{margin-top:8px;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 14px;border-radius:9px;border:1px solid var(--mp-line,#e7eaf0);background:#fff;color:var(--mp-t1,#0b2a5b);font:600 13px/1 var(--font);cursor:pointer}
+.mp-layb:hover{background:#f4f7fc}
+.sl.lay .sh h2{font-size:24px;margin:2px 0 4px}
+.sl.lay .sb{display:flex!important;align-items:center;justify-content:center;padding:4px 22px 6px!important}
+.sl.lay .lay-fig{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+.sl.lay .lay-fig img{max-width:100%;max-height:100%;object-fit:contain;border:1px solid #d9d2bf;border-radius:6px;background:#fff}
 #ovShow{position:fixed;inset:0;z-index:9999;background:#0b1220;display:none;flex-direction:column;color:#fff}
 #ovShow.on{display:flex}
 #ovShow .ovbar{flex:none;display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 12px;background:#101a2e;font-size:13px}
@@ -1225,7 +1240,7 @@ button,.chip,.upd-chip,.tbtn,.tsel,.ov-btn,.kpi,.dc-item,.upd-card,.tabs button,
 /* PASSWORD GATE (client side). Calls that return project information wait here until a valid session token exists. */
 var GSR=(function(){
   var KEY='bsrdcl-session', TOK=null, queue=[], busy=false;
-  var ARITY={getProjectSummary:1,getMapData:1,getPhotos:1,getPhotoThumbs:1,getPhotoData:2,getReportData:0};
+  var ARITY={getProjectSummary:1,getMapData:1,getPhotos:1,getPhotoThumbs:1,getPhotoData:2,getReportData:0,getLayoutIndex:1,getLayoutImages:1};
   function real(){ return window.google&&google.script&&google.script.run; }
   try{ var o=JSON.parse(localStorage.getItem(KEY)||'null'); if(o&&o.t&&o.e>Date.now()) TOK=o.t; else localStorage.removeItem(KEY); }catch(e){}
   function save(t,secs){ TOK=t; try{ localStorage.setItem(KEY,JSON.stringify({t:t,e:Date.now()+secs*1000-60000})); }catch(e){} }
@@ -1270,6 +1285,67 @@ var GSR=(function(){
     });
   });
   return mk(null,null);
+})();
+</script>
+<script>
+/* SCHEMATIC LAYOUTS: one picture per project, read by the server from its own folder. Shared by the Map and the Full Screen presentation. */
+var LAY=(function(){
+  var L={idx:null,img:{},waiting:null,fail:false};
+  function up(x){ return String(x||'').toUpperCase(); }
+  L.has=function(pid){ return !!(L.idx&&L.idx[up(pid)]); };
+  L.fid=function(pid){ return L.idx?L.idx[up(pid)]:null; };
+  L.index=function(cb){
+    if(L.idx) return cb(L.idx);
+    if(L.waiting){ L.waiting.push(cb); return; }
+    L.waiting=[cb];
+    function end(v){ L.idx=v||{}; var w=L.waiting; L.waiting=null; w.forEach(function(f){ try{ f(L.idx); }catch(e){ if(window.console) console.error(e); } }); }
+    if(!(window.google&&google.script&&google.script.run)){ end({}); return; }
+    GSR.withSuccessHandler(function(v){ end(v&&typeof v==='object'?v:{}); }).withFailureHandler(function(){ L.fail=true; end({}); }).getLayoutIndex(false);
+  };
+  /* fetch the pictures for these file ids (3 per call, 3 calls at a time); cb when all are done */
+  L.fetch=function(ids,cb,prog){
+    ids=ids.filter(function(id,i){ return id&&!L.img[id]&&ids.indexOf(id)===i; });
+    var total=ids.length, done=0, batches=[]; for(var i=0;i<ids.length;i+=3) batches.push(ids.slice(i,i+3));
+    if(!total) return cb();
+    var next=0, active=0;
+    function pump(){
+      while(active<3&&next<batches.length){
+        (function(b){ active++;
+          GSR.withSuccessHandler(function(m){ m=m||{}; b.forEach(function(id){ if(m[id]) L.img[id]=m[id]; }); fin(b.length); })
+             .withFailureHandler(function(){ fin(b.length); }).getLayoutImages(b);
+        })(batches[next++]);
+      }
+    }
+    function fin(n){ active--; done+=n; if(prog) prog(done,total); if(done>=total) cb(); else pump(); }
+    pump();
+  };
+  /* project ids (e.g. BSRD0030) -> make sure the index and pictures are ready */
+  L.prepare=function(pids,cb,prog){
+    L.index(function(){ var ids=pids.map(function(p){ return L.fid(p); }).filter(Boolean); L.fetch(ids,cb,prog); });
+  };
+  L.src=function(pid){ var f=L.fid(pid); return f&&L.img[f]?L.img[f]:''; };
+  /* full-size viewer (used by the Map button) */
+  function bx(i){ return document.getElementById(i); }
+  L.open=function(pid,title){
+    var box=bx('layBox'), st=bx('layS'); box.classList.add('on'); box.classList.remove('z'); bx('layZ').textContent='Zoom';
+    bx('layT').textContent=(title?title+' \u00b7 ':'')+pid+' \u00b7 Schematic layout';
+    function msg(t){ st.innerHTML=''; var d=document.createElement('div'); d.className='lb-msg'; d.textContent=t; st.appendChild(d); }
+    msg('Loading the layout\u2026');
+    L.prepare([pid],function(){
+      var u=L.src(pid); if(!box.classList.contains('on')) return;
+      if(!u){ msg('The layout could not be loaded. Please try again in a moment.'); return; }
+      st.innerHTML=''; var im=document.createElement('img'); im.alt='Schematic layout of '+pid; im.src=u; st.appendChild(im);
+    });
+  };
+  L.close=function(){ bx('layBox').classList.remove('on','z'); bx('layS').innerHTML=''; };
+  document.addEventListener('click',function(ev){
+    var t=ev.target; if(!t||!t.closest) return;
+    if(t.closest('#layX')){ L.close(); return; }
+    if(t.closest('#layZ')||t.closest('#layS img')){ var b=bx('layBox'); b.classList.toggle('z'); bx('layZ').textContent=b.classList.contains('z')?'Fit':'Zoom'; return; }
+    var o=t.closest('[data-layopen]'); if(o){ L.open(o.getAttribute('data-layopen'),o.getAttribute('data-laytitle')||''); }
+  });
+  window.addEventListener('keydown',function(e){ if(e.key==='Escape'&&bx('layBox').classList.contains('on')){ e.stopImmediatePropagation(); e.preventDefault(); L.close(); } },true);
+  return L;
 })();
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
@@ -1464,6 +1540,15 @@ function showInfo(p){
    +(g?(p.lines&&p.lines.length?'<p class="mp-note"><span style="color:#1a8a4c">&#9679;</span> Start &nbsp; <span style="color:#df4b3f">&#9679;</span> End'+((p.markers||[]).length?' &nbsp; <span style="color:#1d2433">&#9679;</span> Bridges and structures':'')+(p.note?' &middot; '+esc(p.note):'')+'</p>':'<p class="mp-note">Site area shown on the map.</p>'):'<p class="mp-note">The alignment for this project has not been added yet.</p>');
   $('mpInfo').hidden=false;
   $('mpClose').onclick=clearSel;
+  layBtn(p);
+}
+function layBtn(p){
+  LAY.index(function(){
+    if(S.sel!==p.id||!LAY.has(p.id)) return;
+    var h=$('mpInfo').querySelector('h3'); if(!h||$('mpInfo').querySelector('.mp-layb')) return;
+    var b=document.createElement('button'); b.type='button'; b.className='mp-layb'; b.setAttribute('data-layopen',p.id); b.setAttribute('data-laytitle',p.name||''); b.textContent='View layout';
+    var f=$('mpInfo').querySelector('.mp-facts'); if(f&&f.parentNode) f.parentNode.insertBefore(b,f.nextSibling); else h.parentNode.appendChild(b);
+  });
 }
 
 /* ---- events ---- */
@@ -2469,6 +2554,7 @@ load();
 setTab('ov');
 })();
 </script>
+  <div id="layBox" role="dialog" aria-modal="true" aria-label="Project layout"><div class="lb-bar"><b id="layT"></b><span><button type="button" id="layZ">Zoom</button><button type="button" id="layX">Close</button></span></div><div class="lb-st" id="layS"></div></div>
   <div id="ovShow" role="dialog" aria-modal="true" aria-label="Full screen presentation">
     <div class="ovbar">
       <button type="button" id="ovPrev" data-ov="prev" aria-label="Previous slide">&larr; Prev</button>
@@ -3105,6 +3191,8 @@ function buildSlides(list){
     var pi=t.piu?piuList.indexOf(t.piu)+1:null;
     var small=(t.piu?'PIU '+pi+' of '+piuList.length:'No PIU named in the records')+(t.district?' · '+t.district:'')+(t.latest_update_date?' · latest '+dmy(t.latest_update_date):'');
     var chips=[[pid,'id'],[t.project_category,'g']]; chips.push([t.project_status,'g']); if(t._iss.length) chips.push([t._iss.length+' pending item'+(t._iss.length===1?'':'s'),'p']);
+    var lsrc=LAY.src(pid);
+    if(lsrc){ var ls=fb.mk(t.topic_project,{num:ix+1,small:small+' \u00b7 schematic layout',chips:[[pid,'id'],[t.project_category,'g']],cls:'proj lay',piu:t.piu||''}); var lsb=ls.querySelector('.sb'); if(lsb) lsb.innerHTML='<div class="lay-fig"><img alt="Schematic layout of '+esc(pid)+'" src="'+lsrc+'"></div>'; }
     fb.start(t.topic_project,{num:ix+1,small:small,chips:chips,kpis:kp,cls:'proj',piu:t.piu||''});
     var items=[];
     (s.status_points||[]).forEach(function(x){ if(!t._doneTx[one(x)]) items.push(['sp','Current status',hl(x)]);});
@@ -3135,6 +3223,7 @@ function openShow(){
   if(!D) return;
   var list=visible(); if(!list.length){ setNote('Nothing to present: no projects match the current filters.'); return; }
   busyMsg('Preparing the presentation…');
+  layReady(list,function(){
   setTimeout(function(){
     try{ if(document.fonts&&document.fonts.ready) {} SLIDES=buildSlides(list); }catch(e){ if(window.console) console.error(e); busyMsg(''); setNote('The presentation could not be prepared.'); return; }
     $('ovMeasure').innerHTML=''; busyMsg('');
@@ -3142,6 +3231,15 @@ function openShow(){
     SHOW.i=0; SHOW.on=true; $('ovShow').classList.add('on'); showAt(0); fit();
     var el=$('ovShow'); try{ if(el.requestFullscreen) el.requestFullscreen().catch(function(){}); }catch(e){}
   },30);
+  });
+}
+/* loads the layout pictures of the projects being presented (projects without one are simply skipped) */
+function layReady(list,cb){
+  var done=false; function go(){ if(done) return; done=true; cb(); }
+  try{
+    setTimeout(go,45000);                                  // never hold the presentation back for long
+    LAY.prepare(list.map(function(t){ return t.project_id; }),go,function(n,tot){ busyMsg('Loading layouts\u2026 '+n+' of '+tot); });
+  }catch(e){ if(window.console) console.error(e); go(); }
 }
 function showAt(i){
   var sl=$('ovStage').querySelectorAll('.sl'); if(!sl.length) return; i=Math.max(0,Math.min(sl.length-1,i)); SHOW.i=i;
@@ -3162,6 +3260,7 @@ function busyMsg(t){ var b=$('ovBusy'); if(!t){b.classList.remove('on');return;}
 function downloadPdf(){
   if(!D) return; var list=visible(); if(!list.length){ setNote('Nothing to export: no projects match the current filters.'); return; }
   busyMsg('Preparing the PDF…');
+  layReady(list,function(){
   Promise.all([loadScript(H2C_URLS,function(){return !!window.html2canvas;}),loadScript(PDF_URLS,function(){return !!(window.jspdf&&window.jspdf.jsPDF);})]).then(function(r){
     if(!r[0]||!r[1]){ busyMsg(''); setNote('The PDF tools could not be loaded. Please check the internet connection and try again.'); return; }
     var html; try{ html=buildSlides(list); }catch(e){ if(window.console) console.error(e); busyMsg(''); setNote('The PDF could not be prepared.'); return; }
@@ -3182,6 +3281,7 @@ function downloadPdf(){
         i++; return new Promise(function(r2){setTimeout(r2,0);}).then(step);
       });
     }).catch(function(e){ if(window.console) console.error(e); meas.innerHTML=''; meas.style.visibility=''; busyMsg(''); setNote('The PDF could not be created. Please try again.'); });
+  });
   });
 }
 
